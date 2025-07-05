@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Online-Lehrgang: Anwesenheit</title>
+</head>
+<body>
+    <h1>Teilnahme bestätigen</h1>
+    <form id="anmeldung">
+        <label for="name">Name:</label><br>
+        <input type="text" id="name" name="name" required><br><br>
+
+        <label for="kurs">Kurs:</label><br>
+        <input type="text" id="kurs" name="kurs" required><br><br>
+
+        <button type="submit">Teilnahme bestätigen</button>
+    </form>
+
+    <p id="status" style="margin-top: 20px;"></p>
+
+    <script>
+        document.getElementById('anmeldung').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = e.target.name.value.trim();
+            const kurs = e.target.kurs.value.trim();
+
+            const res = await fetch('/api/teilnahme', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ name, kurs })
+            });
+
+            const result = await res.json();
+            document.getElementById('status').innerText = result.message || 'Fehler';
+        });
+    </script>
+</body>
+</html>
