@@ -1,17 +1,20 @@
 from flask import Flask, request, jsonify, send_file, render_template, Response
+from flask_cors import CORS
 import sqlite3
 from datetime import datetime
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
-from functools import wraps
 import os
+import secrets
+from functools import wraps
 
 app = Flask(__name__)
+CORS(app)
+app.secret_key = secrets.token_hex(16)
 DATABASE = 'anwesenheit.db'
 
-# Zugangsdaten für Admin
-ADMIN_USER = "Admin"
-ADMIN_PASS = "Admin"
+AUTH_USERNAME = 'Admin'
+AUTH_PASSWORD = 'Admin'
 
 def init_db():
     conn = sqlite3.connect(DATABASE)
@@ -29,10 +32,13 @@ def init_db():
     conn.close()
 
 def check_auth(username, password):
-    return username == ADMIN_USER and password == ADMIN_PASS
+    return username == AUTH_USERNAME and password == AUTH_PASSWORD
 
 def authenticate():
-    return Response('Login erforderlich.', 401, {'WWW-Authenticate': 'Basic realm="Login erforderlich"'})
+    return Response(
+        'Login erforderlich.', 401,
+        {'WWW-Authenticate': 'Basic realm="Login erforderlich"'}
+    )
 
 def requires_auth(f):
     @wraps(f)
@@ -45,15 +51,16 @@ def requires_auth(f):
 
 @app.route('/')
 def index():
-    return render_template("index.html")
+    return render_template('index.html')
 
 @app.route('/api/teilnahme', methods=['POST'])
-def teilnahme():
+def teilnahme_bestaetigen():
     data = request.get_json()
     name = data.get('name')
-    kurs = data.get('kurs', 'Allgemeiner Lehrgang')
+    kurs = data.get('kurs')
+
     if not name or not kurs:
-        return jsonify({'message': 'Name und Kurs erforderlich'}), 400
+        return jsonify({'message': 'Name oder Kurs fehlen!'}), 400
 
     datum = datetime.now().strftime('%Y-%m-%d')
     uhrzeit = datetime.now().strftime('%H:%M:%S')
@@ -65,25 +72,22 @@ def teilnahme():
     conn.commit()
     conn.close()
 
-    return jsonify({'message': f'{name} eingetragen ({kurs}) – {datum}, {uhrzeit}'})
+    return jsonify({'message': f'Teilnahme von {name} am {datum} um {uhrzeit} gespeichert (Kurs: {kurs}).'})
 
 @app.route('/api/teilnehmerliste', methods=['GET'])
-def teilnehmer_liste():
-    kurs = request.args.get('kurs', '')
+def get_teilnehmerliste():
     datum = datetime.now().strftime('%Y-%m-%d')
+    kurs = request.args.get('kurs', 'Allgemeiner Lehrgang')
     conn = sqlite3.connect(DATABASE)
     c = conn.cursor()
-    if kurs:
-        c.execute('SELECT name FROM teilnahmen WHERE datum = ? AND kurs = ?', (datum, kurs))
-    else:
-        c.execute('SELECT name FROM teilnahmen WHERE datum = ?', (datum,))
-    eintraege = c.fetchall()
+    c.execute('SELECT name FROM teilnahmen WHERE datum = ? AND kurs = ?', (datum, kurs))
+    daten = c.fetchall()
     conn.close()
-    return jsonify([x[0] for x in eintraege])
+    return jsonify([name[0] for name in daten])
 
 @app.route('/excel')
 @requires_auth
-def excel_download():
+def download_excel():
     datum = datetime.now().strftime('%Y-%m-%d')
     conn = sqlite3.connect(DATABASE)
     c = conn.cursor()
@@ -94,20 +98,25 @@ def excel_download():
     wb = Workbook()
     ws = wb.active
     ws.title = f"Teilnehmer {datum}"
-    ws.append(['Name', 'Datum', 'Uhrzeit', 'Kurs'])
+    ws.append(["Name", "Datum", "Uhrzeit", "Kurs"])
+    for zeile in daten:
+        ws.append(list(zeile))
 
-    for eintrag in daten:
-        ws.append(eintrag)
-
-    for col in range(1, 5):
+    for col in range(1, ws.max_column + 1):
         ws.column_dimensions[get_column_letter(col)].width = 25
 
-    filename = f"anwesenheit_{datum}.xlsx"
-    wb.save(filename)
+    dateiname = f"anwesenheit_{datum}.xlsx"
+    wb.save(dateiname)
 
-    return send_file(filename, as_attachment=True)
+    return send_file(
+        dateiname,
+        as_attachment=True,
+        download_name=dateiname,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
 if __name__ == '__main__':
     init_db()
     app.run(debug=True)
+
 
