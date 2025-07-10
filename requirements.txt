@@ -1,3 +1,12 @@
-Flask==3.1.1
-Flask-Cors==6.0.1
-openpyxl==3.1.2
+def requires_auth(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        auth = request.authorization
+        if not auth or not check_auth(auth.username, auth.password):
+            return Response(
+                'Login erforderlich', 401,
+                {'WWW-Authenticate': 'Basic realm="Excel Zugriff"',
+                 'Cache-Control': 'no-store'}
+            )
+        return f(*args, **kwargs)
+    return decorated
