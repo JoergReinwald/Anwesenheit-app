@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Anwesenheitsliste</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            background: #f3f3f3;
+            padding: 30px;
+            max-width: 600px;
+            margin: auto;
+        }
+        h1, h2 {
+            text-align: center;
+            color: #333;
+        }
+        form, .liste {
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        input, select {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        button {
+            padding: 10px 20px;
+            background: #2980b9;
+            border: none;
+            color: white;
+            font-size: 16px;
+            border-radius: 5px;
+        }
+        ul {
+            padding-left: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Online-Lehrgang: Anwesenheit</h1>
+
+    <form id="anmeldung">
+        <label>Name:</label>
+        <input type="text" id="name" required>
+
+        <label>Kurs:</label>
+        <select id="kurs" required>
+            <option value="">-- Kurs wählen --</option>
+            <option>Kurierdienstfahrer</option>
+            <option>Pflegedienst</option>
+            <option>Führerscheinklasse A</option>
+            <option>Führerscheinklasse B</option>
+        </select>
+
+        <button type="submit">Teilnahme bestätigen</button>
+    </form>
+
+    <div class="liste">
+        <h2>Heutige Teilnehmer:</h2>
+        <ul id="teilnehmer"></ul>
+    </div>
+
+    <div>
+        <h3>Excel herunterladen</h3>
+        <form id="excelForm">
+            <input type="text" id="user" placeholder="Benutzername" required>
+            <input type="password" id="pass" placeholder="Passwort" required>
+            <button type="submit">Herunterladen</button>
+        </form>
+    </div>
+
+    <p id="status"></p>
+
+    <script>
+        async function ladeTeilnehmer() {
+            const kurs = document.getElementById('kurs').value;
+            const res = await fetch(`/api/teilnehmerliste?kurs=${encodeURIComponent(kurs)}`);
+            const daten = await res.json();
+            const liste = document.getElementById('teilnehmer');
+            liste.innerHTML = '';
+            daten.forEach(name => {
+                const li = document.createElement('li');
+                li.textContent = name;
+                liste.appendChild(li);
+            });
+        }
+
+        document.getElementById('anmeldung').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('name').value;
+            const kurs = document.getElementById('kurs').value;
+            const res = await fetch('/api/teilnahme', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, kurs })
+            });
+            const result = await res.json();
+            document.getElementById('status').innerText = result.message;
+            ladeTeilnehmer();
+        });
+
+        document.getElementById('kurs').addEventListener('change', ladeTeilnehmer);
+
+        document.getElementById('excelForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const user = document.getElementById('user').value;
+            const pass = document.getElementById('pass').value;
+            const auth = btoa(`${user}:${pass}`);
+
+            const res = await fetch('/excel', {
+                headers: { 'Authorization': `Basic ${auth}` }
+            });
+
+            if (res.ok) {
+                const blob = await res.blob();
+                const link = document.createElement('a');
+                link.href = window.URL.createObjectURL(blob);
+                link.download = "anwesenheit.xlsx";
+                link.click();
+            } else {
+                alert("Login fehlgeschlagen");
+            }
+        });
+
+        ladeTeilnehmer();
+    </script>
+</body>
+</html>
